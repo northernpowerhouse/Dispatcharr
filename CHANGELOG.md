@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Optional separate port for client-facing traffic.** New `DISPATCHARR_CLIENT_PORT` env var (unset by default — fully backward compatible) adds a second nginx listener serving only client-facing surfaces: `/output/`, `/hdhr/`, `/proxy/`, the Xtream-Codes compatibility routes (`player_api.php`, `get.php`, `xmltv.php`, `live/`, the unprefixed `<user>/<pass>/<channel_id>` stream route, `movie/`, `series/`), and timeshift. The admin UI, `/api/`, Django admin, and `/ws/` are never served on this port. A new Django middleware (`core.middleware.PortAccessControlMiddleware`) enforces the same allowlist server-side based on Django's own resolved view (not nginx's path matching), so the ambiguous unprefixed Xtream route can't leak the admin SPA even for a client with username `admin`. The existing admin port keeps serving everything, as today; point untrusted networks only at the new client port and restrict the admin port at the infra level (Docker port publishing, firewall, reverse proxy ACL).
+
 ## [0.30.0] - 2026-08-29
 
 ### Added

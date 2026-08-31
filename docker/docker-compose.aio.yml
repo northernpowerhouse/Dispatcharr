@@ -8,6 +8,10 @@ services:
     container_name: dispatcharr
     ports:
       - 9191:9191
+      # Optional second port for client-only traffic (IPTV players, HDHR,
+      # Xtream clients). Uncomment together with DISPATCHARR_CLIENT_PORT
+      # below, matching the container-side port.
+      #- 9192:9192
     volumes:
       - dispatcharr_data:/data
     environment:
@@ -28,6 +32,14 @@ services:
       # Set to a specific IP/CIDR to narrow trust, or none to ignore proxy headers.
       #- DISPATCHARR_TRUSTED_PROXIES=172.18.0.0/16
       #- DISPATCHARR_TRUSTED_PROXIES=none
+
+      # Admin/client port split (optional). When set, nginx adds a second
+      # listener on this port serving only client-facing surfaces (output,
+      # HDHR, proxy, Xtream-Codes routes) — no admin UI, /api/, or /ws/.
+      # Point IPTV players/HDHR devices/Xtream clients at this port and keep
+      # the admin port (9191) restricted at the infra level. Requires a
+      # matching `ports:` mapping above.
+      #- DISPATCHARR_CLIENT_PORT=9192
 
       # Legacy CPU Support (Optional)
       # Uncomment to enable legacy NumPy build for older CPUs (circa 2009)

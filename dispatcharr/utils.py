@@ -108,6 +108,16 @@ def _ip_in_trusted(ip):
     return any(ip in network for network in _trusted_proxy_networks())
 
 
+def request_from_trusted_proxy(request):
+    """Whether REMOTE_ADDR is a proxy this instance trusts to set forwarding headers.
+
+    Same trust gate as get_client_ip() (DISPATCHARR_TRUSTED_PROXIES), reused
+    by PortAccessControlMiddleware so an untrusted peer can't spoof
+    X-Forwarded-Port to claim client-port routing.
+    """
+    return _ip_in_trusted(_normalize_ip(request.META.get("REMOTE_ADDR") or ""))
+
+
 def get_client_ip(request):
     """Return the client IP for ACLs and logging.
 

@@ -1,0 +1,81 @@
+# Optional second listener for client-facing traffic only (IPTV players,
+# HDHR devices, Xtream clients). Rendered into
+# /etc/nginx/sites-enabled/client by docker/init/03-init-dispatcharr.sh only
+# when DISPATCHARR_CLIENT_PORT is set; otherwise this file is never used.
+#
+# Locations below only need to route the known client-facing path shapes to
+# the same uWSGI backend used on the admin port — they are not the security
+# boundary. core/middleware.py: PortAccessControlMiddleware is, since it
+# checks Django's already-resolved view name/namespace instead of re-deriving
+# routing intent from the raw path (needed because the unprefixed Xtream
+# route <username>/<password>/<channel_id> shares its URL shape with the
+# admin SPA's catch-all route). No /api/, /admin/, /ws/, /static/, /assets/,
+# or root / here.
+server {
+    listen NGINX_CLIENT_PORT;
+    listen [::]:NGINX_CLIENT_PORT;
+
+    proxy_connect_timeout 75;
+    proxy_send_timeout 300;
+    proxy_read_timeout 300;
+    client_max_body_size 0;
+
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Host $host:$server_port;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Port $server_port;
+
+    location ^~ /output/ {
+        include uwsgi_params;
+        uwsgi_pass unix:/app/uwsgi.sock;
+    }
+
+    location ^~ /hdhr {
+        include uwsgi_params;
+        uwsgi_pass unix:/app/uwsgi.sock;
+    }
+
+    location ^~ /proxy/ {
+        include uwsgi_params;
+        uwsgi_pass unix:/app/uwsgi.sock;
+        uwsgi_buffering off;
+        uwsgi_read_timeout 300s;
+        uwsgi_send_timeout 300s;
+        client_max_body_size 0;
+    }
+
+    location ^~ /live/ {
+        include uwsgi_params;
+        uwsgi_pass unix:/app/uwsgi.sock;
+    }
+
+    location ^~ /movie/ {
+        include uwsgi_params;
+        uwsgi_pass unix:/app/uwsgi.sock;
+    }
+
+    location ^~ /series/ {
+        include uwsgi_params;
+        uwsgi_pass unix:/app/uwsgi.sock;
+    }
+
+    location ^~ /timeshift/ {
+        include uwsgi_params;
+        uwsgi_pass unix:/app/uwsgi.sock;
+    }
+
+    # Xtream-Codes PHP-style endpoints (player_api.php, panel_api.php,
+    # get.php, xmltv.php, streaming/timeshift.php).
+    location ~ \.php$ {
+        include uwsgi_params;
+        uwsgi_pass unix:/app/uwsgi.sock;
+    }
+
+    # Unprefixed Xtream stream route: <username>/<password>/<channel_id>.
+    location ~ ^/[^/]+/[^/]+/[^/]+$ {
+        include uwsgi_params;
+        uwsgi_pass unix:/app/uwsgi.sock;
+    }
+}

@@ -86,6 +86,13 @@ else:
 ALLOWED_HOSTS = ["*"]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+# Optional second nginx listener serving only client-facing surfaces
+# (output/HDHR/proxy/Xtream-Codes routes), enforced by
+# core.middleware.PortAccessControlMiddleware. Unset (default) keeps
+# everything on DISPATCHARR_PORT with no behavior change.
+_dispatcharr_client_port = os.environ.get("DISPATCHARR_CLIENT_PORT", "").strip()
+DISPATCHARR_CLIENT_PORT = _dispatcharr_client_port if _dispatcharr_client_port.isdigit() else None
+
 INSTALLED_APPS = [
     "apps.api",
     "apps.accounts",
@@ -146,6 +153,7 @@ REQUESTS_TIMEOUT = 30  # Seconds for external API requests
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "core.middleware.PortAccessControlMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

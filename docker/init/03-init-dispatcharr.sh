@@ -63,12 +63,26 @@ if ! [[ "$DISPATCHARR_PORT" =~ ^[0-9]+$ ]]; then
 fi
 sed -i "s/NGINX_PORT/${DISPATCHARR_PORT}/g" /etc/nginx/sites-enabled/default
 
+# Optional second nginx listener serving only client-facing paths (opt-in via
+# DISPATCHARR_CLIENT_PORT). Skipped entirely when unset so nginx never tries
+# to bind a port nobody asked for.
+if [ -n "$DISPATCHARR_CLIENT_PORT" ]; then
+    if [[ "$DISPATCHARR_CLIENT_PORT" =~ ^[0-9]+$ ]]; then
+        sed "s/NGINX_CLIENT_PORT/${DISPATCHARR_CLIENT_PORT}/g" \
+            /app/docker/nginx-client.conf.template > /etc/nginx/sites-enabled/client
+        echo "✅ Client-only nginx listener enabled on port ${DISPATCHARR_CLIENT_PORT}"
+    else
+        echo "⚠️  Warning: DISPATCHARR_CLIENT_PORT is not a valid integer, ignoring (client port stays disabled)"
+    fi
+fi
+
 # Configure nginx based on IPv6 availability
 if ip -6 addr show | grep -q "inet6"; then
     echo "✅ IPv6 is available, enabling IPv6 in nginx"
 else
     echo "⚠️  IPv6 not available, disabling IPv6 in nginx"
     sed -i '/listen \[::\]:/d' /etc/nginx/sites-enabled/default
+    [ -f /etc/nginx/sites-enabled/client ] && sed -i '/listen \[::\]:/d' /etc/nginx/sites-enabled/client
 fi
 
 # NOTE: mac doesn't run as root, so only manage permissions
