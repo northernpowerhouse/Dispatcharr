@@ -144,6 +144,12 @@ class M3UAccountSerializer(serializers.ModelSerializer):
         allow_null=True,
         validators=[validate_flexible_url],
     )
+    proxy_url = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=500,
+    )
     enable_vod = serializers.BooleanField(required=False, write_only=True)
     auto_enable_new_groups_live = serializers.BooleanField(required=False, write_only=True)
     auto_enable_new_groups_vod = serializers.BooleanField(required=False, write_only=True)
@@ -175,6 +181,7 @@ class M3UAccountSerializer(serializers.ModelSerializer):
             "password",
             "stale_stream_days",
             "priority",
+            "proxy_url",
             "status",
             "last_message",
             "enable_vod",
@@ -192,6 +199,18 @@ class M3UAccountSerializer(serializers.ModelSerializer):
                 "write_only": True,
             },
         }
+
+    def validate_proxy_url(self, value):
+        """Normalize blank to None and enforce a supported proxy scheme."""
+        if not value or not value.strip():
+            return None
+
+        value = value.strip()
+        if not M3UAccount.PROXY_URL_RE.match(value):
+            raise serializers.ValidationError(
+                "Proxy URL must start with http://, https://, socks5://, or socks5h://"
+            )
+        return value
 
     def to_representation(self, instance):
         # When the list() view pre-aggregates stream counts for all accounts

@@ -3,6 +3,8 @@ import logging
 import traceback
 import json
 
+from core.network_utils import build_account_session
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,11 +30,12 @@ def normalize_server_url(url):
 class Client:
     """Xtream Codes API Client with robust error handling"""
 
-    def __init__(self, server_url, username, password, user_agent=None):
+    def __init__(self, server_url, username, password, user_agent=None, account=None):
         self.server_url = self._normalize_url(server_url)
         self.username = username
         self.password = password
         self.user_agent = user_agent
+        self.account = account
 
         # Fix: Properly handle all possible user_agent input types
         if user_agent:
@@ -46,9 +49,8 @@ class Client:
         else:
             user_agent_string = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
 
-        # Create persistent session
-        self.session = requests.Session()
-        self.session.headers.update({'User-Agent': user_agent_string})
+        # Create persistent session, routed through the account's proxy if configured
+        self.session = build_account_session(account, base_headers={'User-Agent': user_agent_string})
 
         # Configure connection pooling
         adapter = requests.adapters.HTTPAdapter(

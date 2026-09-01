@@ -152,6 +152,7 @@ class SerializableConnectionState:
     def __init__(self, session_id: str, stream_url: str, headers: dict,
                  content_length: str = None, content_type: str = None,
                  final_url: str = None, m3u_profile_id: int = None,
+                 proxy_url: str = None,
                  # Session metadata fields (previously stored in vod_session key)
                  content_obj_type: str = None, content_uuid: str = None,
                  content_name: str = None, client_ip: str = None,
@@ -165,6 +166,7 @@ class SerializableConnectionState:
         self.content_type = content_type
         self.final_url = final_url
         self.m3u_profile_id = m3u_profile_id  # Store M3U profile ID for connection counting
+        self.proxy_url = proxy_url  # Provider-specific outbound proxy for this connection
         self.last_activity = time.time()
         self.request_count = 0
         self.active_streams = 0
@@ -203,6 +205,7 @@ class SerializableConnectionState:
             'content_type': self.content_type or '',
             'final_url': self.final_url or '',
             'm3u_profile_id': str(self.m3u_profile_id) if self.m3u_profile_id is not None else '',
+            'proxy_url': self.proxy_url or '',
             'last_activity': str(self.last_activity),
             'request_count': str(self.request_count),
             'active_streams': str(self.active_streams),
@@ -240,6 +243,7 @@ class SerializableConnectionState:
             content_type=data.get('content_type') or None,
             final_url=data.get('final_url') if data.get('final_url') else None,
             m3u_profile_id=int(data.get('m3u_profile_id')) if data.get('m3u_profile_id') else None,
+            proxy_url=data.get('proxy_url') or None,
             # Session metadata
             content_obj_type=data.get('content_obj_type') or None,
             content_uuid=data.get('content_uuid') or None,
@@ -397,6 +401,7 @@ class RedisBackedVODConnection:
         return cached
 
     def create_connection(self, stream_url: str, headers: dict, m3u_profile_id: int = None,
+                         proxy_url: str = None,
                          # Session metadata (consolidated from vod_session key)
                          content_obj_type: str = None, content_uuid: str = None,
                          content_name: str = None, client_ip: str = None,
@@ -421,6 +426,7 @@ class RedisBackedVODConnection:
                 stream_url=stream_url,
                 headers=headers,
                 m3u_profile_id=m3u_profile_id,
+                proxy_url=proxy_url,
                 # Session metadata
                 content_obj_type=content_obj_type,
                 content_uuid=content_uuid,
@@ -459,6 +465,10 @@ class RedisBackedVODConnection:
             # Create local session if needed
             if not self.local_session:
                 self.local_session = requests.Session()
+                if state.proxy_url:
+                    self.local_session.proxies.update(
+                        {"http": state.proxy_url, "https": state.proxy_url}
+                    )
 
             # Prepare headers
             headers = state.headers.copy()
@@ -1033,6 +1043,7 @@ class MultiWorkerVODConnectionManager:
                     stream_url=modified_stream_url,
                     headers=headers,
                     m3u_profile_id=m3u_profile.id,
+                    proxy_url=m3u_profile.m3u_account.proxy_url,
                     # Session metadata (consolidated from separate vod_session key)
                     content_obj_type=content_type,
                     content_uuid=content_uuid,

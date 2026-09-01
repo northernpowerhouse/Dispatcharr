@@ -100,12 +100,37 @@ class M3UAccount(models.Model):
         default=0,
         help_text="Priority for VOD provider selection (higher numbers = higher priority). Used when multiple providers offer the same content.",
     )
+    proxy_url = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text=(
+            "Optional outbound proxy for all requests to this provider "
+            "(M3U fetch, Xtream API, live/VOD playback). "
+            "http://[user:pass@]host:port, socks5://[user:pass@]host:port, "
+            "or socks5h://[user:pass@]host:port (resolves DNS through the "
+            "proxy — recommended for geo-restricted providers)."
+        ),
+    )
+
+    PROXY_URL_RE = re.compile(r"^(https?|socks5h?)://", re.IGNORECASE)
+
     def __str__(self):
         return self.name
 
     def clean(self):
         if self.max_streams < 0:
             raise ValidationError("Max streams cannot be negative.")
+        if self.proxy_url and not self.PROXY_URL_RE.match(self.proxy_url):
+            raise ValidationError(
+                "Proxy URL must start with http://, https://, socks5://, or socks5h://"
+            )
+
+    def get_proxies_dict(self):
+        """Return a requests-style proxies dict for this account's proxy_url, or None."""
+        if not self.proxy_url:
+            return None
+        return {"http": self.proxy_url, "https": self.proxy_url}
 
     def display_action(self):
         return "Exclude" if self.exclude else "Include"

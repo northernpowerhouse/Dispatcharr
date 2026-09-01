@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-M3U-account outbound proxy (`Proxy URL`).** Each M3U/Xtream account can route all of its provider traffic through its own HTTP(S) or SOCKS5 proxy, set in the M3U account form (`http://`, `https://`, `socks5://`, or `socks5h://`, with optional `user:pass@`; `socks5h://` also resolves DNS through the proxy, which is what geo-restricted providers usually need). Accounts left blank connect directly exactly as before. The proxy is applied to every outbound path used to reach that provider: M3U playlist fetch, the Xtream Codes API client, VOD probe and persistent streaming connections, the native live proxy reader, and the ffmpeg/streamlink/vlc transcode subprocess (via injected `http_proxy`/`https_proxy` env vars). This makes per-provider VPN isolation possible — for example one Gluetun sidecar per geo-location, with each account pointed at its own container — without host networking, macvlan, or routing the whole container through a single VPN.
+
 ## [0.30.0] - 2026-08-29
 
 ### Added

@@ -26,6 +26,7 @@ from core.utils import (
     truncate_with_warning,
 )
 from core.models import CoreSettings
+from core.network_utils import build_account_session
 from core.xtream_codes import Client as XCClient
 from core.utils import send_websocket_update
 from .utils import (
@@ -202,7 +203,7 @@ def fetch_m3u_lines(account, use_cache=False):
                 account.last_message = "Starting download..."
                 account.save(update_fields=["status", "last_message"])
 
-                response = requests.get(
+                response = build_account_session(account).get(
                     account.server_url, headers=headers, stream=True,
                     timeout=(30, 60),  # 30s connect, 60s read between chunks
                 )
@@ -929,6 +930,7 @@ def collect_xc_streams(account_id, enabled_groups):
             account.username,
             account.password,
             account.get_user_agent_string(),
+            account=account,
         ) as xc_client:
 
             stream_url_prefix = (
@@ -1098,6 +1100,7 @@ def process_xc_category_direct(account_id, batch, groups, hash_keys):
             account.username,
             account.password,
             account.get_user_agent_string(),
+            account=account,
         ) as xc_client:
             # Log the batch details to help with debugging
             logger.debug(f"Processing XC batch: {batch}")
@@ -1623,7 +1626,8 @@ def refresh_m3u_groups(account_id, use_cache=False, full_refresh=False, scan_sta
             # Create XCClient with explicit error handling
             try:
                 with XCClient(
-                    account.server_url, account.username, account.password, user_agent_string
+                    account.server_url, account.username, account.password, user_agent_string,
+                    account=account,
                 ) as xc_client:
                     logger.info(f"XCClient instance created successfully")
 
@@ -3254,7 +3258,8 @@ def refresh_account_profiles(account_id):
                     profile_url,
                     profile_username,
                     profile_password,
-                    user_agent_string
+                    user_agent_string,
+                    account=account,
                 ) as profile_client:
                     # Authenticate with this profile's credentials
                     if profile_client.authenticate():
@@ -3330,6 +3335,7 @@ def refresh_account_info(profile_id):
             transformed_username,
             transformed_password,
             account.get_user_agent_string(),
+            account=account,
         )        # Authenticate and get account info
         auth_result = client.authenticate()
         if not auth_result:

@@ -79,5 +79,9 @@ export const prepareSubmitValues = (values, expDate) => {
     prepared.server_group = null;
   }
 
+  if (typeof prepared.proxy_url === 'string') {
+    prepared.proxy_url = prepared.proxy_url.trim() || null;
+  }
+
   return prepared;
 };

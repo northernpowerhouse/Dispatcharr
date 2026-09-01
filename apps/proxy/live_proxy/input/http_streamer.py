@@ -15,10 +15,11 @@ logger = get_logger()
 class HTTPStreamReader:
     """Thread-based HTTP stream reader that writes to a pipe"""
 
-    def __init__(self, url, user_agent=None, chunk_size=8192):
+    def __init__(self, url, user_agent=None, chunk_size=8192, proxies=None):
         self.url = url
         self.user_agent = user_agent
         self.chunk_size = chunk_size
+        self.proxies = proxies
         self.session = None
         self.response = None
         self.thread = None
@@ -57,6 +58,8 @@ class HTTPStreamReader:
 
             # Create session
             self.session = requests.Session()
+            if self.proxies:
+                self.session.proxies.update(self.proxies)
 
             # Disable retries for faster failure detection
             adapter = HTTPAdapter(max_retries=0, pool_connections=1, pool_maxsize=1)

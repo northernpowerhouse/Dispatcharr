@@ -674,6 +674,7 @@ def _serve_catchup(request, user, channel, timestamp, client_duration_hint=None)
             dispatcharr_stream_id=target.catchup_stream.id,
             provider_timestamp=provider_timestamp,
             provider_tz_name=provider_tz_name,
+            proxy_url=m3u_account.proxy_url,
         ):
             try:
                 release_profile_slot(reserved_profile.id, redis_client)
@@ -1467,9 +1468,17 @@ def _try_serve_busy_eof_probe(
     if isinstance(user_agent, bytes):
         user_agent = user_agent.decode()
 
+    # From the pool entry, not the DB: this path runs without a usable
+    # connection (see _stream_from_provider).
+    proxy_url = entry.get("proxy_url") or ""
+    if isinstance(proxy_url, bytes):
+        proxy_url = proxy_url.decode()
+    probe_proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+
     try:
         upstream = _open_upstream(
             final_url, user_agent, effective_range, allow_redirects=False,
+            proxies=probe_proxies,
         )
     except Exception as exc:
         logger.debug(
@@ -2185,8 +2194,14 @@ def _create_pool_session(
     dispatcharr_stream_id,
     provider_timestamp,
     provider_tz_name=None,
+    proxy_url=None,
 ):
-    """Register an already-reserved slot for this client session."""
+    """Register an already-reserved slot for this client session.
+
+    ``proxy_url`` is stored so the near-EOF probe, which reconnects to the
+    cached CDN URL from the Redis entry alone, keeps using the account's
+    egress without a DB lookup on the streaming path.
+    """
     if redis_client is None or not session_id:
         return False
     key = _pool_key(session_id)
@@ -2206,6 +2221,7 @@ def _create_pool_session(
                 "dispatcharr_stream_id": str(dispatcharr_stream_id),
                 "provider_timestamp": str(provider_timestamp),
                 "provider_tz_name": str(provider_tz_name or ""),
+                "proxy_url": str(proxy_url or ""),
                 "busy": "1",
                 "last_activity": now,
             })
@@ -2727,6 +2743,7 @@ def _attempt_timeshift_stream(
         presentation_remaining=presentation_remaining,
         presentation_byte_base=presentation_byte_base,
         relative_presentation_range=relative_presentation_range,
+        account_proxies=m3u_account.get_proxies_dict(),
     )
 
 
@@ -3107,12 +3124,15 @@ def _unregister_stats_client(redis_client, stats_channel_id, client_id):
         logger.warning("Timeshift stats unregister failed: %s", exc)
 
 
-def _open_upstream(url, user_agent, range_header, *, allow_redirects=True):
+def _open_upstream(url, user_agent, range_header, *, allow_redirects=True, proxies=None):
     """Open upstream HTTP.
 
     Portal URLs need ``allow_redirects=True`` (XC → CDN). Cached CDN
     ``final_url`` values use ``allow_redirects=False`` so reconnects do not
     mint a new provider timeshift lock/token.
+
+    ``proxies`` routes the request through the account's configured proxy, so
+    catchup reaches the provider over the same egress as live/VOD playback.
     """
     # identity: raw peek bytes are not gzip-transparent.
     headers = {"Accept-Encoding": "identity"}
@@ -3129,6 +3149,7 @@ def _open_upstream(url, user_agent, range_header, *, allow_redirects=True):
             ConfigHelper.chunk_timeout(),
         ),
         allow_redirects=allow_redirects,
+        proxies=proxies,
     )
 
 
@@ -3192,6 +3213,7 @@ def _stream_from_provider(
     presentation_remaining=None,
     presentation_byte_base=None,
     relative_presentation_range=False,
+    account_proxies=None,
 ):
     """Try each upstream URL until one returns streamable MPEG-TS.
 
@@ -3208,6 +3230,10 @@ def _stream_from_provider(
     Sets ``timeshift_decisive`` on auth/ban-class failures (401/403/406) so the
     failover loop skips the rest of that account's streams. ``release_cb`` frees
     the provider slot when the streaming response is closed.
+
+    ``account_proxies`` is resolved by the caller (which already holds the
+    M3UAccount): this runs with the DB connection closed for streaming, so it
+    must not issue queries of its own.
     """
     chunk_size = max(ConfigHelper.chunk_size(), 262144)
     if release_cb is None:
@@ -3245,6 +3271,7 @@ def _stream_from_provider(
         try:
             response = _open_upstream(
                 url, user_agent, range_header, allow_redirects=follow_redirects,
+                proxies=account_proxies,
             )
         except requests.exceptions.RequestException as exc:
             if cached_final:

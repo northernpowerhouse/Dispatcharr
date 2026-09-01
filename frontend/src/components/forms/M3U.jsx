@@ -91,6 +91,7 @@ const M3U = ({
       stale_stream_days: 7,
       priority: 0,
       enable_vod: false,
+      proxy_url: '',
     },
 
     validate: {
@@ -126,6 +127,7 @@ const M3U = ({
             ? m3uAccount.priority
             : 0,
         enable_vod: m3uAccount.enable_vod || false,
+        proxy_url: m3uAccount.proxy_url ?? '',
       });
       setExpDate(expDateFromPlaylist(m3uAccount.exp_date));
 
@@ -393,6 +395,15 @@ const M3U = ({
                     value: `${ua.id}`,
                   }))
                 )}
+              />
+              <TextInput
+                id="proxy_url"
+                name="proxy_url"
+                label="Proxy URL"
+                placeholder="socks5h://user:pass@host:1080"
+                description="Optional proxy for all requests to this provider (http://, https://, socks5://, socks5h://). Leave empty to connect directly."
+                {...form.getInputProps('proxy_url')}
+                key={form.key('proxy_url')}
               />
             </Stack>
 

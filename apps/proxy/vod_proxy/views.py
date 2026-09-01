@@ -27,6 +27,7 @@ from apps.accounts.authentication import ApiKeyAuthentication, QueryParamJWTAuth
 from apps.proxy.utils import check_user_stream_limits
 from dispatcharr.utils import network_access_allowed
 from core.utils import dispatcharr_user_agent
+from core.network_utils import get_account_proxies
 
 logger = logging.getLogger(__name__)
 
@@ -980,7 +981,10 @@ def head_vod(request, content_type, content_id, session_id=None, profile_id=None
         }
 
         logger.info(f"[VOD-HEAD] Making small range GET request to provider: {final_stream_url}")
-        response = requests.get(final_stream_url, headers=headers, timeout=30, allow_redirects=True, stream=True)
+        response = requests.get(
+            final_stream_url, headers=headers, timeout=30, allow_redirects=True, stream=True,
+            proxies=get_account_proxies(m3u_account),
+        )
 
         # Check for range support - should be 206 for partial content
         if response.status_code == 206:

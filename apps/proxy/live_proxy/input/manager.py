@@ -3,7 +3,6 @@
 import threading
 import time
 import socket
-import requests
 import subprocess
 import gevent
 import re
@@ -11,6 +10,7 @@ from django.db import connection, close_old_connections
 from apps.proxy.config import TSConfig as Config
 from apps.channels.models import Channel, Stream
 from core.utils import log_system_event
+from core.network_utils import get_stream_proxies, get_stream_subprocess_env
 from .buffer import StreamBuffer
 from ..utils import detect_stream_type, get_logger
 from ..redis_keys import RedisKeys
@@ -155,30 +155,6 @@ class StreamManager:
         self._last_bitrate_db_save_time = 0
         self._bitrate_db_save_interval = 30  # seconds between DB writes
         self._bitrate_warmup_samples = 10   # discard first N samples while EMA stabilizes (~5s)
-
-    def _create_session(self):
-        """Create and configure requests session with optimal settings"""
-        session = requests.Session()
-
-        # Configure session headers
-        session.headers.update({
-            'User-Agent': self.user_agent,
-            'Connection': 'keep-alive'
-        })
-
-        # Set up connection pooling for better performance
-        adapter = requests.adapters.HTTPAdapter(
-            pool_connections=1,     # Single connection for this stream
-            pool_maxsize=1,         # Max size of connection pool
-            max_retries=3,          # Auto-retry for failed requests
-            pool_block=False        # Don't block when pool is full
-        )
-
-        # Apply adapter to both HTTP and HTTPS
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
-
-        return session
 
     def _record_connection_failure(self):
         """Record a failure; reset the counter if the last one was long ago."""
@@ -778,6 +754,11 @@ class StreamManager:
             try:
                 channel = get_stream_object(self.channel_id)
 
+                # Proxy env vars for the provider that owns this stream. Resolved
+                # here so the DB connection is returned by the finally below,
+                # before posix_spawn.
+                spawn_env = get_stream_subprocess_env(self.current_stream_id)
+
                 # Use FFmpeg specifically for HLS streams
                 if hasattr(self, 'force_ffmpeg') and self.force_ffmpeg:
                     from core.models import StreamProfile
@@ -841,7 +822,7 @@ class StreamManager:
                 _pid = _os.posix_spawn(
                     _executable,
                     self.transcode_cmd,
-                    _os.environ,
+                    spawn_env,
                     file_actions=[
                         (_os.POSIX_SPAWN_OPEN, 0, '/dev/null', _os.O_RDONLY, 0),
                         (_os.POSIX_SPAWN_DUP2, relay_write, 1),
@@ -1302,11 +1283,20 @@ class StreamManager:
             # This allows us to use the same fetch_chunk() path as transcode
             from .http_streamer import HTTPStreamReader
 
+            # Provider proxy for this stream's M3U account, if configured.
+            # Released immediately so the reader thread does not run with a
+            # pool slot checked out.
+            try:
+                stream_proxies = get_stream_proxies(self.current_stream_id)
+            finally:
+                close_old_connections()
+
             # Create and start the HTTP stream reader
             self.http_reader = HTTPStreamReader(
                 url=self.url,
                 user_agent=self.user_agent,
-                chunk_size=self.chunk_size
+                chunk_size=self.chunk_size,
+                proxies=stream_proxies,
             )
 
             # Start the reader thread and get the read end of the pipe
