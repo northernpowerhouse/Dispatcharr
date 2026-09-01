@@ -78,4 +78,12 @@ server {
         include uwsgi_params;
         uwsgi_pass unix:/app/uwsgi.sock;
     }
+
+    # Explicit catch-all: without this, nginx's compiled-in default root
+    # (html/index.html under its install prefix) silently serves the stock
+    # nginx welcome page for "/" and "/index.html" instead of 404ing, since
+    # neither is matched by any location above.
+    location / {
+        return 404;
+    }
 }
